@@ -1,0 +1,36 @@
+#!/usr/bin/python3 -u
+
+import argparse
+import json
+import pathlib
+from datetime import datetime, timedelta
+
+import dateutil.parser
+import requests
+
+argparser = argparse.ArgumentParser(description="")
+argparser.add_argument("uri", help="")
+argparser.add_argument("path", nargs="?", default="/var/tmp/heal-check", help="")
+args = argparser.parse_args()
+
+path = pathlib.Path(args.path)
+utcnow = datetime.utcnow()
+
+
+def handle_error():
+    if path.is_file():
+        exit(utcnow - dateutil.parser.parse(path.read_text()) > timedelta(minutes=5))
+    else:
+        path.write_text(utcnow.isoformat())
+        exit(0)
+
+
+try:
+    response = requests.get(args.uri, timeout=10)
+    if not response.ok:
+        handle_error()
+    else:
+        if utcnow - dateutil.parser.parse(json.loads(response.text).get("utc")) > timedelta(minutes=5):
+            handle_error()
+except requests.exceptions.RequestException:
+    handle_error()
