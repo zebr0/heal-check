@@ -29,8 +29,9 @@ try:
     response = requests.get(args.uri, timeout=10)
     if not response.ok:
         handle_error()
-    else:
-        if utcnow - dateutil.parser.parse(json.loads(response.text).get("utc")) > timedelta(minutes=5):
-            handle_error()
+    elif utcnow - dateutil.parser.parse(json.loads(response.text).get("utc")) > timedelta(minutes=5):
+        handle_error()
+    elif json.loads(response.text).get("status") == "ko":
+        exit(1)
 except requests.exceptions.RequestException:
     handle_error()

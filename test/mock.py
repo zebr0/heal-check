@@ -24,3 +24,14 @@ class OkTooOldRH(http.server.BaseHTTPRequestHandler):
             "utc": (datetime.utcnow() - timedelta(minutes=6)).isoformat(),
             "status": "ok"
         }).encode("utf-8"))
+
+
+class KoRH(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "utc": datetime.utcnow().isoformat(),
+            "status": "ko"
+        }).encode("utf-8"))
