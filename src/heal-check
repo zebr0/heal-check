@@ -1,6 +1,7 @@
 #!/usr/bin/python3 -u
 
 import argparse
+import hashlib
 import json
 import pathlib
 from datetime import datetime, timedelta
@@ -10,14 +11,15 @@ import requests
 
 argparser = argparse.ArgumentParser(description="")
 argparser.add_argument("uri", help="")
-argparser.add_argument("path", nargs="?", default="/var/tmp/heal-check", help="")
+argparser.add_argument("-f", "--file-prefix", default="/var/tmp/heal-check-", help="")
 args = argparser.parse_args()
 
-path = pathlib.Path(args.path)
+uri_md5 = hashlib.md5(args.uri.encode("utf-8")).hexdigest()
+path = pathlib.Path(args.file_prefix + uri_md5)
 utcnow = datetime.utcnow()
 
 
-def handle_error():
+def warning():
     if path.is_file():
         exit(utcnow - dateutil.parser.parse(path.read_text()) > timedelta(minutes=5))
     else:
@@ -28,10 +30,14 @@ def handle_error():
 try:
     response = requests.get(args.uri, timeout=10)
     if not response.ok:
-        handle_error()
+        warning()
     elif utcnow - dateutil.parser.parse(json.loads(response.text).get("utc")) > timedelta(minutes=5):
-        handle_error()
+        warning()
     elif json.loads(response.text).get("status") == "ko":
+        if path.exists():
+            path.unlink()
         exit(1)
+    elif json.loads(response.text).get("status") == "fixing":
+        warning()
 except requests.exceptions.RequestException:
-    handle_error()
+    warning()

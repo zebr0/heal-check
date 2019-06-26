@@ -9,58 +9,67 @@ from datetime import datetime, timedelta
 import dateutil.parser
 import mock
 
-first_warning = pathlib.Path("first_warning")
+warning = pathlib.Path("heal-check-4411def9d576984c8d78253236b2a62f")
 
 
 def run():
-    return subprocess.Popen("../src/heal-check http://127.0.0.1:8000 first_warning", shell=True, stdout=sys.stdout, stderr=sys.stderr).wait()
+    return subprocess.Popen("../src/heal-check http://127.0.0.1:8000 -f heal-check-", shell=True, stdout=sys.stdout, stderr=sys.stderr).wait()
 
 
-def test_ko():
-    # test a: no first error timestamp
+def test_warnings():
+    if warning.exists():
+        warning.unlink()
+
+    # test a: no warning beforehand
     just_before = datetime.utcnow()
-    # then: exit code 0 + first error timestamp created at now
+    # then: exit code 0 + warning created just now
     assert run() == 0
-    assert first_warning.exists() and dateutil.parser.parse(first_warning.read_text()) >= just_before
+    assert warning.exists()
+    assert dateutil.parser.parse(warning.read_text()) >= just_before
 
-    # test b: first error 4 minutes ago
+    # test b: warning 4 minutes ago
     four_minutes_ago = (datetime.utcnow() - timedelta(minutes=4)).isoformat()
-    first_warning.write_text(four_minutes_ago)
-    # then: exit code 0 + first error timestamp unchanged
+    warning.write_text(four_minutes_ago)
+    # then: exit code 0 + warning unchanged
     assert run() == 0
-    assert first_warning.exists() and first_warning.read_text() == four_minutes_ago
+    assert warning.exists()
+    assert warning.read_text() == four_minutes_ago
 
-    # test c: first error 6 minutes ago
+    # test c: warning 6 minutes ago
     six_minutes_ago = (datetime.utcnow() - timedelta(minutes=6)).isoformat()
-    first_warning.write_text(six_minutes_ago)
-    # then: exit code 1 + first error timestamp unchanged
-    assert run() == 1 and first_warning.read_text() == six_minutes_ago
+    warning.write_text(six_minutes_ago)
+    # then: exit code 1 + warning unchanged
+    assert run() == 1
+    assert warning.exists()
+    assert warning.read_text() == six_minutes_ago
 
+    warning.unlink()
 
-# cleans a potentially failed previous test run
-if first_warning.exists():
-    first_warning.unlink()
 
 # test 1: server not responding
-test_ko()
-first_warning.unlink()
+test_warnings()
 
 # starting the mock server
 server = mock.MockHealHTTPServer()
 threading.Thread(target=server.serve_forever).start()
 
 # test 2: 404
-server.RequestHandlerClass = mock.NotFoundRH
-test_ko()
-first_warning.unlink()
+server.RequestHandlerClass = mock.NotFound
+test_warnings()
 
 # test 3: 200 but 6 minutes old
-server.RequestHandlerClass = mock.OkTooOldRH
-test_ko()
-first_warning.unlink()
+server.RequestHandlerClass = mock.OkTooOld
+test_warnings()
 
 # test 4: 200 but KO
-server.RequestHandlerClass = mock.KoRH
+server.RequestHandlerClass = mock.Ko
+warning.write_text((datetime.utcnow() - timedelta(minutes=1)).isoformat())
+# then exit code 1 + any warning is removed
 assert run() == 1
+assert not warning.exists()
 
-server.shutdown()
+# test 5: 200 but fixing
+server.RequestHandlerClass = mock.Fixing
+test_warnings()
+
+server.shutdown()  # todo: fix hang when assert fails
