@@ -61,7 +61,7 @@ test_warnings()
 server.RequestHandlerClass = mock.OkTooOld
 test_warnings()
 
-# test 4: 200 but KO
+# test 4: 200 but ko
 server.RequestHandlerClass = mock.Ko
 warning.write_text((datetime.utcnow() - timedelta(minutes=1)).isoformat())
 # then exit code 1 + any warning is removed
@@ -71,5 +71,12 @@ assert not warning.exists()
 # test 5: 200 but fixing
 server.RequestHandlerClass = mock.Fixing
 test_warnings()
+
+# test 6: 200 and ok
+server.RequestHandlerClass = mock.Ok
+warning.write_text((datetime.utcnow() - timedelta(minutes=1)).isoformat())
+# then exit code 0 + any warning is removed
+assert run() == 0
+assert not warning.exists()
 
 server.shutdown()  # todo: fix hang when assert fails

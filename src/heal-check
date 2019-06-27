@@ -39,5 +39,9 @@ try:
         exit(1)
     elif json.loads(response.text).get("status") == "fixing":
         warning()
+    elif json.loads(response.text).get("status") == "ok":
+        if path.exists():
+            path.unlink()
+        exit(0)
 except requests.exceptions.RequestException:
     warning()
