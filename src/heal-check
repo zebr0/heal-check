@@ -1,10 +1,11 @@
 #!/usr/bin/python3 -u
 
 import argparse
+import datetime
+import enum
 import hashlib
 import json
 import pathlib
-from datetime import datetime, timedelta
 
 import dateutil.parser
 import requests
@@ -16,12 +17,19 @@ args = argparser.parse_args()
 
 uri_md5 = hashlib.md5(args.uri.encode("utf-8")).hexdigest()
 path = pathlib.Path(args.file_prefix + uri_md5)
-utcnow = datetime.utcnow()
+utcnow = datetime.datetime.utcnow()
+utcnow_minus5 = utcnow - datetime.timedelta(minutes=5)
+
+
+class Status(enum.Enum):
+    ok = 0
+    ko = 1
+    fixing = enum.auto()
 
 
 def warning():
     if path.is_file():
-        exit(utcnow - dateutil.parser.parse(path.read_text()) > timedelta(minutes=5))
+        exit(dateutil.parser.parse(path.read_text()) < utcnow_minus5)
     else:
         path.write_text(utcnow.isoformat())
         exit(0)
@@ -31,17 +39,15 @@ try:
     response = requests.get(args.uri, timeout=10)
     if not response.ok:
         warning()
-    elif utcnow - dateutil.parser.parse(json.loads(response.text).get("utc")) > timedelta(minutes=5):
-        warning()
-    elif json.loads(response.text).get("status") == "ko":
-        if path.exists():
-            path.unlink()
-        exit(1)
-    elif json.loads(response.text).get("status") == "fixing":
-        warning()
-    elif json.loads(response.text).get("status") == "ok":
-        if path.exists():
-            path.unlink()
-        exit(0)
+    else:
+        response_json = json.loads(response.text)
+        utc = dateutil.parser.parse(response_json.get("utc"))
+        status = Status[response_json.get("status")]
+        if utc < utcnow_minus5 or status == Status.fixing:
+            warning()
+        else:
+            if path.exists():
+                path.unlink()
+            exit(status.value)
 except requests.exceptions.RequestException:
     warning()
