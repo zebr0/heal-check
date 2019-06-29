@@ -79,4 +79,12 @@ warning.write_text((datetime.utcnow() - timedelta(minutes=1)).isoformat())
 assert run() == 0
 assert not warning.exists()
 
+# test 7: 200 but bad utc
+server.RequestHandlerClass = mock.BadUtc
+test_warnings()
+
+# test 8: 200 but bad status
+server.RequestHandlerClass = mock.BadStatus
+test_warnings()
+
 server.shutdown()  # todo: fix hang when assert fails

@@ -49,5 +49,5 @@ try:
             if path.exists():
                 path.unlink()
             exit(status.value)
-except requests.exceptions.RequestException:
+except (requests.exceptions.RequestException, ValueError, KeyError):
     warning()
