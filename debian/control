@@ -1,0 +1,11 @@
+Source: heal-check
+Section: utils
+Priority: optional
+Maintainer: Thomas JOUANNOT (Mazerty) <mazerty@gmail.com>
+Build-Depends: debhelper (>=10)
+Standards-Version: 3.9.7
+
+Package: heal-check
+Architecture: all
+Depends: ${misc:Depends}, python3, python3-requests, python3-dateutil
+Description: Minimalist health-check for zebr0/heal

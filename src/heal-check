@@ -10,7 +10,7 @@ import pathlib
 import dateutil.parser
 import requests
 
-argparser = argparse.ArgumentParser(description="")
+argparser = argparse.ArgumentParser(description="Minimalist health-check for zebr0/heal")
 argparser.add_argument("uri", help="")
 argparser.add_argument("-f", "--file-prefix", default="/var/tmp/heal-check-", help="")
 args = argparser.parse_args()
