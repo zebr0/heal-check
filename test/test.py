@@ -87,4 +87,4 @@ test_warnings()
 server.RequestHandlerClass = mock.BadStatus
 test_warnings()
 
-server.shutdown()  # todo: fix hang when assert fails
+server.shutdown()  # todo: fix hang when assert fails (use unittest)

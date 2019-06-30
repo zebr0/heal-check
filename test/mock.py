@@ -79,3 +79,5 @@ class BadStatus(http.server.BaseHTTPRequestHandler):
             "utc": datetime.utcnow().isoformat(),
             "status": "sudo rm -rf /"
         }).encode("utf-8"))
+
+# TODO: rework
