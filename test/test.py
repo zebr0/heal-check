@@ -13,7 +13,7 @@ warning = pathlib.Path("heal-check-4411def9d576984c8d78253236b2a62f")
 
 
 def run():
-    return subprocess.Popen("../src/heal-check http://127.0.0.1:8000 -f heal-check-", shell=True, stdout=sys.stdout, stderr=sys.stderr).wait()
+    return subprocess.Popen("../src/heal-check http://127.0.0.1:8000 -f heal-check- -d 5", shell=True, stdout=sys.stdout, stderr=sys.stderr).wait()
 
 
 def test_warnings():

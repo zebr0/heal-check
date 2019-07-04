@@ -13,12 +13,13 @@ import requests
 argparser = argparse.ArgumentParser(description="Minimalist health-check for zebr0/heal")
 argparser.add_argument("uri", help="")
 argparser.add_argument("-f", "--file-prefix", default="/var/tmp/heal-check-", help="")
+argparser.add_argument("-d", "--delay", type=int, default=30, help="")
 args = argparser.parse_args()
 
 uri_md5 = hashlib.md5(args.uri.encode("utf-8")).hexdigest()
 path = pathlib.Path(args.file_prefix + uri_md5)
 utcnow = datetime.datetime.utcnow()
-utcnow_minus5 = utcnow - datetime.timedelta(minutes=5)
+utclimit = utcnow - datetime.timedelta(minutes=args.delay)
 
 
 class Status(enum.Enum):
@@ -29,7 +30,7 @@ class Status(enum.Enum):
 
 def warning():
     if path.is_file():
-        exit(dateutil.parser.parse(path.read_text()) < utcnow_minus5)
+        exit(dateutil.parser.parse(path.read_text()) < utclimit)
     else:
         path.write_text(utcnow.isoformat())
         exit(0)
@@ -43,7 +44,7 @@ try:
         response_json = json.loads(response.text)
         utc = dateutil.parser.parse(response_json.get("utc"))
         status = Status[response_json.get("status")]
-        if utc < utcnow_minus5 or status == Status.fixing:
+        if utc < utclimit or status == Status.fixing:
             warning()
         else:
             if path.exists():
