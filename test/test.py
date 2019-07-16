@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import dateutil.parser
 import mock
 
-warning = pathlib.Path("heal-check-4411def9d576984c8d78253236b2a62f")
+file = pathlib.Path("heal-check-4411def9d576984c8d78253236b2a62f")
 
 
 def run():
@@ -17,33 +17,30 @@ def run():
 
 
 def test_warnings():
-    if warning.exists():
-        warning.unlink()
+    if file.exists():
+        file.unlink()
 
     # test a: no warning beforehand
     just_before = datetime.utcnow()
     # then: exit code 0 + warning created just now
     assert run() == 0
-    assert warning.exists()
-    assert dateutil.parser.parse(warning.read_text()) >= just_before
+    assert file.exists()
+    assert dateutil.parser.parse(file.read_text()) >= just_before
 
     # test b: warning 4 minutes ago
     four_minutes_ago = (datetime.utcnow() - timedelta(minutes=4)).isoformat()
-    warning.write_text(four_minutes_ago)
+    file.write_text(four_minutes_ago)
     # then: exit code 0 + warning unchanged
     assert run() == 0
-    assert warning.exists()
-    assert warning.read_text() == four_minutes_ago
+    assert file.exists()
+    assert file.read_text() == four_minutes_ago
 
     # test c: warning 6 minutes ago
     six_minutes_ago = (datetime.utcnow() - timedelta(minutes=6)).isoformat()
-    warning.write_text(six_minutes_ago)
-    # then: exit code 1 + warning unchanged
+    file.write_text(six_minutes_ago)
+    # then: exit code 1 + any warning is removed
     assert run() == 1
-    assert warning.exists()
-    assert warning.read_text() == six_minutes_ago
-
-    warning.unlink()
+    assert not file.exists()
 
 
 # test 1: server not responding
@@ -63,10 +60,10 @@ test_warnings()
 
 # test 4: 200 but ko
 server.RequestHandlerClass = mock.Ko
-warning.write_text((datetime.utcnow() - timedelta(minutes=1)).isoformat())
+file.write_text((datetime.utcnow() - timedelta(minutes=1)).isoformat())
 # then exit code 1 + any warning is removed
 assert run() == 1
-assert not warning.exists()
+assert not file.exists()
 
 # test 5: 200 but fixing
 server.RequestHandlerClass = mock.Fixing
@@ -74,17 +71,21 @@ test_warnings()
 
 # test 6: 200 and ok
 server.RequestHandlerClass = mock.Ok
-warning.write_text((datetime.utcnow() - timedelta(minutes=1)).isoformat())
+file.write_text((datetime.utcnow() - timedelta(minutes=1)).isoformat())
 # then exit code 0 + any warning is removed
 assert run() == 0
-assert not warning.exists()
+assert not file.exists()
 
 # test 7: 200 but bad utc
 server.RequestHandlerClass = mock.BadUtc
-test_warnings()
+# then exit code 1 + any warning is removed
+assert run() == 1
+assert not file.exists()
 
 # test 8: 200 but bad status
 server.RequestHandlerClass = mock.BadStatus
-test_warnings()
+# then exit code 1 + any warning is removed
+assert run() == 1
+assert not file.exists()
 
 server.shutdown()  # todo: fix hang when assert fails (use unittest)
