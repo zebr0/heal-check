@@ -1,91 +1,179 @@
 #!/usr/bin/python3 -u
 
+import http.server
+import json
 import pathlib
+import socketserver
 import subprocess
 import sys
 import threading
+import unittest
 from datetime import datetime, timedelta
 
 import dateutil.parser
-import mock
 
 file = pathlib.Path("heal-check-4411def9d576984c8d78253236b2a62f")
 
 
 def run():
-    return subprocess.Popen("../src/heal-check http://127.0.0.1:8000 -f heal-check- -d 5", shell=True, stdout=sys.stdout, stderr=sys.stderr).wait()
+    return subprocess.Popen("../src/heal-check http://127.0.0.1:8000 -f heal-check-", shell=True, stdout=sys.stdout, stderr=sys.stderr).wait()
 
 
-def test_warnings():
-    if file.exists():
-        file.unlink()
+class TestCase(unittest.TestCase):
+    def setUp(self):
+        # starting the mock server
+        self.server = MockHealHTTPServer()
+        threading.Thread(target=self.server.serve_forever).start()
 
-    # test a: no warning beforehand
-    just_before = datetime.utcnow()
-    # then: exit code 0 + warning created just now
-    assert run() == 0
-    assert file.exists()
-    assert dateutil.parser.parse(file.read_text()) >= just_before
+    def tearDown(self):
+        # stopping the mock server
+        self.server.shutdown()
 
-    # test b: warning 4 minutes ago
-    four_minutes_ago = (datetime.utcnow() - timedelta(minutes=4)).isoformat()
-    file.write_text(four_minutes_ago)
-    # then: exit code 0 + warning unchanged
-    assert run() == 0
-    assert file.exists()
-    assert file.read_text() == four_minutes_ago
+    def warnings(self):
+        if file.exists():
+            file.unlink()
 
-    # test c: warning 6 minutes ago
-    six_minutes_ago = (datetime.utcnow() - timedelta(minutes=6)).isoformat()
-    file.write_text(six_minutes_ago)
-    # then: exit code 1 + any warning is removed
-    assert run() == 1
-    assert not file.exists()
+        # test a: no warning beforehand
+        just_before = datetime.utcnow()
+        # then: exit code 0 + warning created just now
+        self.assertEqual(run(), 0)
+        self.assertTrue(file.exists())
+        self.assertGreaterEqual(dateutil.parser.parse(file.read_text()), just_before)
+
+        # test b: warning 29 minutes ago
+        four_minutes_ago = (datetime.utcnow() - timedelta(minutes=29)).isoformat()
+        file.write_text(four_minutes_ago)
+        # then: exit code 0 + warning unchanged
+        self.assertEqual(run(), 0)
+        self.assertTrue(file.exists())
+        self.assertEqual(file.read_text(), four_minutes_ago)
+
+        # test c: warning 31 minutes ago
+        six_minutes_ago = (datetime.utcnow() - timedelta(minutes=31)).isoformat()
+        file.write_text(six_minutes_ago)
+        # then: exit code 1 + any warning is removed
+        self.assertEqual(run(), 1)
+        self.assertFalse(file.exists())
+
+    def test_server_not_responding(self):
+        self.warnings()
+
+    def test_404(self):
+        self.server.RequestHandlerClass = NotFound
+        self.warnings()
+
+    def test_200_but_6_minutes_old(self):
+        self.server.RequestHandlerClass = OkTooOld
+        self.warnings()
+
+    def test_200_but_ko(self):
+        self.server.RequestHandlerClass = Ko
+        file.touch()
+        # then exit code 1 + any warning is removed
+        self.assertEqual(run(), 1)
+        self.assertFalse(file.exists())
+
+    def test_200_but_fixing(self):
+        self.server.RequestHandlerClass = Fixing
+        self.warnings()
+
+    def test_200_and_ok(self):
+        self.server.RequestHandlerClass = Ok
+        file.touch()
+        # then exit code 0 + any warning is removed
+        self.assertEqual(run(), 0)
+        self.assertFalse(file.exists())
+
+    def test_200_but_bad_utc(self):
+        self.server.RequestHandlerClass = BadUtc
+        file.touch()
+        # then exit code 1 + any warning is removed
+        self.assertEqual(run(), 1)
+        self.assertFalse(file.exists())
+
+    def test_200_but_bad_status(self):
+        self.server.RequestHandlerClass = BadStatus
+        file.touch()
+        # then exit code 1 + any warning is removed
+        self.assertEqual(run(), 1)
+        self.assertFalse(file.exists())
 
 
-# test 1: server not responding
-test_warnings()
+class MockHealHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    def __init__(self):
+        super().__init__(("0.0.0.0", 8000), None)
 
-# starting the mock server
-server = mock.MockHealHTTPServer()
-threading.Thread(target=server.serve_forever).start()
 
-# test 2: 404
-server.RequestHandlerClass = mock.NotFound
-test_warnings()
+class NotFound(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(404)
+        self.end_headers()
 
-# test 3: 200 but 6 minutes old
-server.RequestHandlerClass = mock.OkTooOld
-test_warnings()
 
-# test 4: 200 but ko
-server.RequestHandlerClass = mock.Ko
-file.write_text((datetime.utcnow() - timedelta(minutes=1)).isoformat())
-# then exit code 1 + any warning is removed
-assert run() == 1
-assert not file.exists()
+class OkTooOld(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "utc": (datetime.utcnow() - timedelta(minutes=31)).isoformat(),
+            "status": "ok"
+        }).encode("utf-8"))
 
-# test 5: 200 but fixing
-server.RequestHandlerClass = mock.Fixing
-test_warnings()
 
-# test 6: 200 and ok
-server.RequestHandlerClass = mock.Ok
-file.write_text((datetime.utcnow() - timedelta(minutes=1)).isoformat())
-# then exit code 0 + any warning is removed
-assert run() == 0
-assert not file.exists()
+class Ko(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "utc": datetime.utcnow().isoformat(),
+            "status": "ko"
+        }).encode("utf-8"))
 
-# test 7: 200 but bad utc
-server.RequestHandlerClass = mock.BadUtc
-# then exit code 1 + any warning is removed
-assert run() == 1
-assert not file.exists()
 
-# test 8: 200 but bad status
-server.RequestHandlerClass = mock.BadStatus
-# then exit code 1 + any warning is removed
-assert run() == 1
-assert not file.exists()
+class Fixing(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "utc": datetime.utcnow().isoformat(),
+            "status": "fixing"
+        }).encode("utf-8"))
 
-server.shutdown()  # todo: fix hang when assert fails (use unittest)
+
+class Ok(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "utc": datetime.utcnow().isoformat(),
+            "status": "ok"
+        }).encode("utf-8"))
+
+
+class BadUtc(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "utc": "MCMLXXXIV",
+            "status": "ok"
+        }).encode("utf-8"))
+
+
+class BadStatus(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "utc": datetime.utcnow().isoformat(),
+            "status": "sudo rm -rf /"
+        }).encode("utf-8"))
+
+
+unittest.main()
