@@ -1,3 +1,10 @@
+heal-check (0.3.0-0ubuntu1) bionic; urgency=medium
+
+  * reworked the whole script for better readability, error tracking and logs
+  * rewrote tests with unittest
+
+ -- Thomas JOUANNOT (Mazerty) <mazerty@gmail.com>  Thu, 25 Jul 2019 07:35:00 +0200
+
 heal-check (0.2.0-0ubuntu1) bionic; urgency=medium
 
   * the delay before returning an error is now a parameter, with a default value of 30 minutes
