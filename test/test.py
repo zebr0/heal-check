@@ -86,10 +86,11 @@ class TestCase(unittest.TestCase):
 
     def test_200_but_bad_utc(self):
         self.server.RequestHandlerClass = BadUtc
-        file.touch()
-        # then exit code 1 + any warning is removed
-        self.assertEqual(run(), 1)
-        self.assertFalse(file.exists())
+        self.warnings()
+
+    def test_200_but_empty_response(self):
+        self.server.RequestHandlerClass = EmptyResponse
+        self.warnings()
 
     def test_200_but_bad_status(self):
         self.server.RequestHandlerClass = BadStatus
@@ -176,4 +177,12 @@ class BadStatus(http.server.BaseHTTPRequestHandler):
         }).encode("utf-8"))
 
 
-unittest.main()
+class EmptyResponse(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write("".encode("utf-8"))
+
+
+unittest.main(verbosity=2)

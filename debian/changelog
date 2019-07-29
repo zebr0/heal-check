@@ -1,3 +1,9 @@
+heal-check (0.4.0-0ubuntu1) bionic; urgency=medium
+
+  * handle the empty response that can randomly happen when the status file is refreshed
+
+ -- Thomas JOUANNOT (Mazerty) <mazerty@gmail.com>  Mon, 29 Jul 2019 15:00:00 +0200
+
 heal-check (0.3.0-0ubuntu1) bionic; urgency=medium
 
   * reworked the whole script for better readability, error tracking and logs

@@ -77,4 +77,4 @@ try:
 
     _exit(error_cause="status ko")
 except Exception as e:
-    _exit(error_cause=str(e))
+    warning(str(e))
