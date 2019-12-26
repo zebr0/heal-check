@@ -5,7 +5,6 @@ import datetime
 import hashlib
 import json
 import pathlib
-import pprint
 
 import dateutil.parser
 import requests
@@ -28,7 +27,7 @@ def _exit(error_cause="", remove_file=False):
         ns.file_path.unlink()
         ns.warning_file = "deleted"
 
-    pprint.pprint(vars(ns))
+    print(json.dumps(vars(ns), default=str, indent=2))
     exit(ns.exit_code)
 
 
