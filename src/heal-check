@@ -13,6 +13,7 @@ argparser = argparse.ArgumentParser(description="Minimalist health-check for zeb
 argparser.add_argument("uri", help="")
 argparser.add_argument("-f", "--file-prefix", default="/var/tmp/heal-check-", help="")
 argparser.add_argument("-d", "--delay", type=int, default=30, help="")
+argparser.add_argument("-m", "--mode", help="")
 ns = argparser.parse_args()
 
 
@@ -74,11 +75,20 @@ def blibli():
     if ns.status != "ok":
         raise CriticalException("status ko")
 
+    ns.modes = ns.response_json.get("modes")
 
-try:
-    blibli()
-    _exit(remove_file=True)
-except CriticalException as e:
-    _exit(str(e))
-except Exception as e:
-    warning(str(e))
+
+if ns.mode:
+    try:
+        blibli()
+        exit(0 if ns.mode in ns.modes else 1)
+    except Exception as e:
+        exit(1)
+else:
+    try:
+        blibli()
+        _exit(remove_file=True)
+    except CriticalException as e:
+        _exit(str(e))
+    except Exception as e:
+        warning(str(e))

@@ -21,16 +21,17 @@ base_stdout = {
     "delay": 30,
     "file_path": filename,
     "file_prefix": file_prefix,
-    "uri": uri
+    "uri": uri,
+    "mode": None
 }
 
 
-def run():
-    sp = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def run(mode=None):
+    sp = subprocess.Popen(command + " -m " + mode if mode else command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (stdout, stderr) = sp.communicate()
 
     # clears the output of time-related values that are difficult to test and not really needed anyway
-    stdout_json = json.loads(stdout)
+    stdout_json = json.loads(stdout or "{}")
     stdout_json.pop("utc_now", "")
     stdout_json.pop("utc_min", "")
     stdout_json.pop("utc_file", "")
@@ -104,6 +105,8 @@ class TestCase(unittest.TestCase):
         self.warnings({
             "warning_cause": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response',))"
         })
+        (rc, stdout) = run("alpha")
+        self.assertEqual(rc, 1)
 
     def test_404(self):
         self.server.RequestHandlerClass = NotFound
@@ -111,6 +114,8 @@ class TestCase(unittest.TestCase):
             "response": "<Response [404]>",
             "warning_cause": "404"
         })
+        (rc, stdout) = run("alpha")
+        self.assertEqual(rc, 1)
 
     def test_200_but_6_minutes_old(self):
         self.server.RequestHandlerClass = OkTooOld
@@ -119,6 +124,8 @@ class TestCase(unittest.TestCase):
             "response_json": {"status": "ok"},
             "warning_cause": "utc_remote < utc_min"
         })
+        (rc, stdout) = run("alpha")
+        self.assertEqual(rc, 1)
 
     def test_200_but_ko(self):
         self.server.RequestHandlerClass = Ko
@@ -136,6 +143,8 @@ class TestCase(unittest.TestCase):
             "status": "ko",
             "warning_file": "deleted"
         })
+        (rc, stdout) = run("alpha")
+        self.assertEqual(rc, 1)
 
     def test_200_but_fixing(self):
         self.server.RequestHandlerClass = Fixing
@@ -145,6 +154,8 @@ class TestCase(unittest.TestCase):
             "status": "fixing",
             "warning_cause": "fixing"
         })
+        (rc, stdout) = run("alpha")
+        self.assertEqual(rc, 1)
 
     def test_200_and_ok(self):
         self.server.RequestHandlerClass = Ok
@@ -155,12 +166,17 @@ class TestCase(unittest.TestCase):
         self.assertFalse(file.exists())
         self.assertEqual(stdout, {
             **base_stdout,
+            "modes": ["alpha"],
             "exit_code": 0,
             "response": "<Response [200]>",
-            "response_json": {"status": "ok"},
+            "response_json": {"modes": ["alpha"], "status": "ok"},
             "status": "ok",
             "warning_file": "deleted"
         })
+        (rc, stdout) = run("alpha")
+        self.assertEqual(rc, 0)
+        (rc, stdout) = run("beta")
+        self.assertEqual(rc, 1)
 
     def test_200_but_bad_utc(self):
         self.server.RequestHandlerClass = BadUtc
@@ -169,6 +185,8 @@ class TestCase(unittest.TestCase):
             "response_json": {"status": "ok"},
             "warning_cause": "Unknown string format"
         })
+        (rc, stdout) = run("alpha")
+        self.assertEqual(rc, 1)
 
     def test_200_but_no_utc(self):
         self.server.RequestHandlerClass = NoUtc
@@ -177,6 +195,8 @@ class TestCase(unittest.TestCase):
             "response_json": {"status": "ok"},
             "warning_cause": "Parser must be a string or character stream, not NoneType"
         })
+        (rc, stdout) = run("alpha")
+        self.assertEqual(rc, 1)
 
     def test_200_but_empty_response(self):
         self.server.RequestHandlerClass = EmptyResponse
@@ -184,6 +204,8 @@ class TestCase(unittest.TestCase):
             "response": "<Response [200]>",
             "warning_cause": "Expecting value: line 1 column 1 (char 0)"
         })
+        (rc, stdout) = run("alpha")
+        self.assertEqual(rc, 1)
 
     def test_200_but_bad_status(self):
         self.server.RequestHandlerClass = BadStatus
@@ -201,6 +223,8 @@ class TestCase(unittest.TestCase):
             "status": "sudo rm -rf /",
             "warning_file": "deleted"
         })
+        (rc, stdout) = run("alpha")
+        self.assertEqual(rc, 1)
 
     def test_200_but_no_status(self):
         self.server.RequestHandlerClass = NoStatus
@@ -218,6 +242,8 @@ class TestCase(unittest.TestCase):
             "status": None,
             "warning_file": "deleted"
         })
+        (rc, stdout) = run("alpha")
+        self.assertEqual(rc, 1)
 
 
 class MockHealHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -271,7 +297,8 @@ class Ok(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps({
             "utc": datetime.utcnow().isoformat(),
-            "status": "ok"
+            "status": "ok",
+            "modes": ["alpha"]
         }).encode("utf-8"))
 
 
