@@ -109,7 +109,7 @@ class TestCase(unittest.TestCase):
         self.server.RequestHandlerClass = NotFound
         self.warnings({
             "response": "<Response [404]>",
-            "warning_cause": 404
+            "warning_cause": "404"
         })
 
     def test_200_but_6_minutes_old(self):
@@ -170,6 +170,14 @@ class TestCase(unittest.TestCase):
             "warning_cause": "Unknown string format"
         })
 
+    def test_200_but_no_utc(self):
+        self.server.RequestHandlerClass = NoUtc
+        self.warnings({
+            "response": "<Response [200]>",
+            "response_json": {"status": "ok"},
+            "warning_cause": "Parser must be a string or character stream, not NoneType"
+        })
+
     def test_200_but_empty_response(self):
         self.server.RequestHandlerClass = EmptyResponse
         self.warnings({
@@ -191,6 +199,23 @@ class TestCase(unittest.TestCase):
             "response": "<Response [200]>",
             "response_json": {"status": "sudo rm -rf /"},
             "status": "sudo rm -rf /",
+            "warning_file": "deleted"
+        })
+
+    def test_200_but_no_status(self):
+        self.server.RequestHandlerClass = NoStatus
+        file.touch()
+        # then exit code 1 + any warning is removed
+        (rc, stdout) = run()
+        self.assertEqual(rc, 1)
+        self.assertFalse(file.exists())
+        self.assertEqual(stdout, {
+            **base_stdout,
+            "error_cause": "status ko",
+            "exit_code": 1,
+            "response": "<Response [200]>",
+            "response_json": {},
+            "status": None,
             "warning_file": "deleted"
         })
 
@@ -261,6 +286,16 @@ class BadUtc(http.server.BaseHTTPRequestHandler):
         }).encode("utf-8"))
 
 
+class NoUtc(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "status": "ok"
+        }).encode("utf-8"))
+
+
 class BadStatus(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -269,6 +304,16 @@ class BadStatus(http.server.BaseHTTPRequestHandler):
         self.wfile.write(json.dumps({
             "utc": datetime.utcnow().isoformat(),
             "status": "sudo rm -rf /"
+        }).encode("utf-8"))
+
+
+class NoStatus(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "utc": datetime.utcnow().isoformat()
         }).encode("utf-8"))
 
 

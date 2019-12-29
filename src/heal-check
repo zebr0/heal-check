@@ -16,6 +16,10 @@ argparser.add_argument("-d", "--delay", type=int, default=30, help="")
 ns = argparser.parse_args()
 
 
+class CriticalException(Exception):
+    pass
+
+
 def _exit(error_cause="", remove_file=False):
     if error_cause:
         ns.error_cause = error_cause
@@ -48,32 +52,33 @@ def warning(cause):
     _exit()
 
 
-try:
+def blibli():
     ns.file_path = pathlib.Path(ns.file_prefix + hashlib.md5(ns.uri.encode("utf-8")).hexdigest())
     ns.utc_now = datetime.datetime.utcnow()
     ns.utc_min = ns.utc_now - datetime.timedelta(minutes=ns.delay)
 
-    try:
-        ns.response = requests.get(ns.uri, timeout=10)
-    except requests.exceptions.RequestException as e:
-        warning(str(e))
-
+    ns.response = requests.get(ns.uri, timeout=10)
     if not ns.response.ok:
-        warning(ns.response.status_code)
+        raise Exception(ns.response.status_code)
 
     ns.response_text = ns.response.text
     ns.response_json = json.loads(ns.response_text)
 
-    ns.utc_remote = dateutil.parser.parse(ns.response_json["utc"])
+    ns.utc_remote = dateutil.parser.parse(ns.response_json.get("utc"))
     if ns.utc_remote < ns.utc_min:
-        warning("utc_remote < utc_min")
+        raise Exception("utc_remote < utc_min")
 
-    ns.status = ns.response_json["status"]
-    if ns.status == "ok":
-        _exit(remove_file=True)
+    ns.status = ns.response_json.get("status")
     if ns.status == "fixing":
-        warning("fixing")
+        raise Exception("fixing")
+    if ns.status != "ok":
+        raise CriticalException("status ko")
 
-    _exit(error_cause="status ko")
+
+try:
+    blibli()
+    _exit(remove_file=True)
+except CriticalException as e:
+    _exit(str(e))
 except Exception as e:
     warning(str(e))
