@@ -11,12 +11,25 @@ from datetime import datetime, timedelta
 
 import dateutil.parser
 
-file = pathlib.Path("heal-check-4411def9d576984c8d78253236b2a62f")
+uri = "http://127.0.0.1:8000"
+file_prefix = "heal-check-"
+filename = file_prefix + "4411def9d576984c8d78253236b2a62f"
+file = pathlib.Path(filename)
+command = "../src/heal-check " + uri + " -f " + file_prefix
+
+base_stdout = {
+    "delay": 30,
+    "file_path": filename,
+    "file_prefix": file_prefix,
+    "uri": uri
+}
 
 
 def run():
-    sp = subprocess.Popen("../src/heal-check http://127.0.0.1:8000 -f heal-check-", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    sp = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (stdout, stderr) = sp.communicate()
+
+    # clears the output of time-related values that are difficult to test and not really needed anyway
     stdout_json = json.loads(stdout)
     stdout_json.pop("utc_now", "")
     stdout_json.pop("utc_min", "")
@@ -25,6 +38,7 @@ def run():
     stdout_json.pop("file_content", "")
     stdout_json.pop("response_text", "")
     stdout_json.get("response_json", {}).pop("utc", "")
+
     return sp.returncode, stdout_json
 
 
@@ -38,139 +52,72 @@ class TestCase(unittest.TestCase):
         # stopping the mock server
         self.server.shutdown()
 
-    def warnings(self):
+    def warnings(self, specific_stdout):
         if file.exists():
             file.unlink()
 
         # test a: no warning beforehand
         just_before = datetime.utcnow()
         # then: exit code 0 + warning created just now
-        (rc, stdout0) = run()
+        (rc, stdout) = run()
         self.assertEqual(rc, 0)
         self.assertTrue(file.exists())
         self.assertGreaterEqual(dateutil.parser.parse(file.read_text()), just_before)
+        self.assertEqual(stdout, {
+            **base_stdout,
+            **specific_stdout,
+            "exit_code": 0,
+            "warning_file": "created"
+        })
 
         # test b: warning 29 minutes ago
         four_minutes_ago = (datetime.utcnow() - timedelta(minutes=29)).isoformat()
         file.write_text(four_minutes_ago)
         # then: exit code 0 + warning unchanged
-        (rc, stdout29) = run()
+        (rc, stdout) = run()
         self.assertEqual(rc, 0)
         self.assertTrue(file.exists())
         self.assertEqual(file.read_text(), four_minutes_ago)
+        self.assertEqual(stdout, {
+            **base_stdout,
+            **specific_stdout,
+            "exit_code": 0,
+            "warning_file": "unchanged"
+        })
 
         # test c: warning 31 minutes ago
         six_minutes_ago = (datetime.utcnow() - timedelta(minutes=31)).isoformat()
         file.write_text(six_minutes_ago)
         # then: exit code 1 + any warning is removed
-        (rc, stdout31) = run()
+        (rc, stdout) = run()
         self.assertEqual(rc, 1)
         self.assertFalse(file.exists())
-
-        return stdout0, stdout29, stdout31
+        self.assertEqual(stdout, {
+            **base_stdout,
+            **specific_stdout,
+            "error_cause": "utc_file < utc_min",
+            "exit_code": 1,
+            "warning_file": "deleted"
+        })
 
     def test_server_not_responding(self):
-        (stdout0, stdout29, stdout31) = self.warnings()
-        self.assertEqual(stdout0, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response',))",
-            'warning_file': 'created'
-        })
-        self.assertEqual(stdout29, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response',))",
-            'warning_file': 'unchanged'
-        })
-        self.assertEqual(stdout31, {
-            'delay': 30,
-            'error_cause': 'utc_file < utc_min',
-            'exit_code': 1,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response',))",
-            'warning_file': 'deleted'
+        self.warnings({
+            "warning_cause": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response',))",
         })
 
     def test_404(self):
         self.server.RequestHandlerClass = NotFound
-        (stdout0, stdout29, stdout31) = self.warnings()
-        self.assertEqual(stdout0, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [404]>',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 404,
-            'warning_file': 'created'
-        })
-        self.assertEqual(stdout29, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [404]>',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 404,
-            'warning_file': 'unchanged'
-        })
-        self.assertEqual(stdout31, {
-            'delay': 30,
-            'error_cause': 'utc_file < utc_min',
-            'exit_code': 1,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [404]>',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 404,
-            'warning_file': 'deleted'
+        self.warnings({
+            "response": "<Response [404]>",
+            "warning_cause": 404,
         })
 
     def test_200_but_6_minutes_old(self):
         self.server.RequestHandlerClass = OkTooOld
-        (stdout0, stdout29, stdout31) = self.warnings()
-        self.assertEqual(stdout0, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'response_json': {'status': 'ok'},
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 'utc_remote < utc_min',
-            'warning_file': 'created'
-        })
-        self.assertEqual(stdout29, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'response_json': {'status': 'ok'},
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 'utc_remote < utc_min',
-            'warning_file': 'unchanged'
-        })
-        self.assertEqual(stdout31, {
-            'delay': 30,
-            'error_cause': 'utc_file < utc_min',
-            'exit_code': 1,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'response_json': {'status': 'ok'},
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 'utc_remote < utc_min',
-            'warning_file': 'deleted'
+        self.warnings({
+            "response": "<Response [200]>",
+            "response_json": {"status": "ok"},
+            "warning_cause": "utc_remote < utc_min",
         })
 
     def test_200_but_ko(self):
@@ -181,57 +128,22 @@ class TestCase(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertFalse(file.exists())
         self.assertEqual(stdout, {
-            'delay': 30,
-            'error_cause': 'status ko',
-            'exit_code': 1,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'response_json': {'status': 'ko'},
-            'status': 'ko',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_file': 'deleted'
+            **base_stdout,
+            "error_cause": "status ko",
+            "exit_code": 1,
+            "response": "<Response [200]>",
+            "response_json": {"status": "ko"},
+            "status": "ko",
+            "warning_file": "deleted"
         })
 
     def test_200_but_fixing(self):
         self.server.RequestHandlerClass = Fixing
-        (stdout0, stdout29, stdout31) = self.warnings()
-        self.assertEqual(stdout0, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'response_json': {'status': 'fixing'},
-            'status': 'fixing',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 'fixing',
-            'warning_file': 'created'
-        })
-        self.assertEqual(stdout29, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'response_json': {'status': 'fixing'},
-            'status': 'fixing',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 'fixing',
-            'warning_file': 'unchanged'
-        })
-        self.assertEqual(stdout31, {
-            'delay': 30,
-            'error_cause': 'utc_file < utc_min',
-            'exit_code': 1,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'response_json': {'status': 'fixing'},
-            'status': 'fixing',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 'fixing',
-            'warning_file': 'deleted'
+        self.warnings({
+            "response": "<Response [200]>",
+            "response_json": {"status": "fixing"},
+            "status": "fixing",
+            "warning_cause": "fixing"
         })
 
     def test_200_and_ok(self):
@@ -242,88 +154,27 @@ class TestCase(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertFalse(file.exists())
         self.assertEqual(stdout, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'response_json': {'status': 'ok'},
-            'status': 'ok',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_file': 'deleted'
+            **base_stdout,
+            "exit_code": 0,
+            "response": "<Response [200]>",
+            "response_json": {"status": "ok"},
+            "status": "ok",
+            "warning_file": "deleted"
         })
 
     def test_200_but_bad_utc(self):
         self.server.RequestHandlerClass = BadUtc
-        (stdout0, stdout29, stdout31) = self.warnings()
-        self.assertEqual(stdout0, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'response_json': {'status': 'ok'},
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 'Unknown string format',
-            'warning_file': 'created'
-        })
-        self.assertEqual(stdout29, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'response_json': {'status': 'ok'},
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 'Unknown string format',
-            'warning_file': 'unchanged'
-        })
-        self.assertEqual(stdout31, {
-            'delay': 30,
-            'error_cause': 'utc_file < utc_min',
-            'exit_code': 1,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'response_json': {'status': 'ok'},
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 'Unknown string format',
-            'warning_file': 'deleted'
+        self.warnings({
+            "response": "<Response [200]>",
+            "response_json": {"status": "ok"},
+            "warning_cause": "Unknown string format",
         })
 
     def test_200_but_empty_response(self):
         self.server.RequestHandlerClass = EmptyResponse
-        (stdout0, stdout29, stdout31) = self.warnings()
-        self.assertEqual(stdout0, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 'Expecting value: line 1 column 1 (char 0)',
-            'warning_file': 'created'
-        })
-        self.assertEqual(stdout29, {
-            'delay': 30,
-            'exit_code': 0,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 'Expecting value: line 1 column 1 (char 0)',
-            'warning_file': 'unchanged'
-        })
-        self.assertEqual(stdout31, {
-            'delay': 30,
-            'error_cause': 'utc_file < utc_min',
-            'exit_code': 1,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_cause': 'Expecting value: line 1 column 1 (char 0)',
-            'warning_file': 'deleted'
+        self.warnings({
+            "response": "<Response [200]>",
+            "warning_cause": "Expecting value: line 1 column 1 (char 0)",
         })
 
     def test_200_but_bad_status(self):
@@ -334,16 +185,13 @@ class TestCase(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertFalse(file.exists())
         self.assertEqual(stdout, {
-            'delay': 30,
-            'error_cause': 'status ko',
-            'exit_code': 1,
-            'file_path': 'heal-check-4411def9d576984c8d78253236b2a62f',
-            'file_prefix': 'heal-check-',
-            'response': '<Response [200]>',
-            'response_json': {'status': 'sudo rm -rf /'},
-            'status': 'sudo rm -rf /',
-            'uri': 'http://127.0.0.1:8000',
-            'warning_file': 'deleted'
+            **base_stdout,
+            "error_cause": "status ko",
+            "exit_code": 1,
+            "response": "<Response [200]>",
+            "response_json": {"status": "sudo rm -rf /"},
+            "status": "sudo rm -rf /",
+            "warning_file": "deleted"
         })
 
 
