@@ -102,14 +102,14 @@ class TestCase(unittest.TestCase):
 
     def test_server_not_responding(self):
         self.warnings({
-            "warning_cause": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response',))",
+            "warning_cause": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response',))"
         })
 
     def test_404(self):
         self.server.RequestHandlerClass = NotFound
         self.warnings({
             "response": "<Response [404]>",
-            "warning_cause": 404,
+            "warning_cause": 404
         })
 
     def test_200_but_6_minutes_old(self):
@@ -117,7 +117,7 @@ class TestCase(unittest.TestCase):
         self.warnings({
             "response": "<Response [200]>",
             "response_json": {"status": "ok"},
-            "warning_cause": "utc_remote < utc_min",
+            "warning_cause": "utc_remote < utc_min"
         })
 
     def test_200_but_ko(self):
@@ -167,14 +167,14 @@ class TestCase(unittest.TestCase):
         self.warnings({
             "response": "<Response [200]>",
             "response_json": {"status": "ok"},
-            "warning_cause": "Unknown string format",
+            "warning_cause": "Unknown string format"
         })
 
     def test_200_but_empty_response(self):
         self.server.RequestHandlerClass = EmptyResponse
         self.warnings({
             "response": "<Response [200]>",
-            "warning_cause": "Expecting value: line 1 column 1 (char 0)",
+            "warning_cause": "Expecting value: line 1 column 1 (char 0)"
         })
 
     def test_200_but_bad_status(self):
