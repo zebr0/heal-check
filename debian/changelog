@@ -1,3 +1,11 @@
+heal-check (0.5.0-0ubuntu1) bionic; urgency=medium
+
+  * added mode handling
+  * refactoring to use exceptions
+  * better stdout in json
+
+ -- Thomas JOUANNOT (Mazerty) <mazerty@gmail.com>  Wed, 01 Jan 2020 20:20:00 +0200
+
 heal-check (0.4.0-0ubuntu1) bionic; urgency=medium
 
   * handle the empty response that can randomly happen when the status file is refreshed
