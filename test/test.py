@@ -32,13 +32,13 @@ def run(mode=None):
 
     # clears the output of time-related values that are difficult to test and not really needed anyway
     stdout_json = json.loads(stdout or "{}")
-    stdout_json.pop("utc_now", "")
-    stdout_json.pop("utc_min", "")
-    stdout_json.pop("utc_file", "")
-    stdout_json.pop("utc_remote", "")
-    stdout_json.pop("file_content", "")
-    stdout_json.pop("response_text", "")
-    stdout_json.get("response_json", {}).pop("utc", "")
+    stdout_json.pop("utc_now", None)
+    stdout_json.pop("utc_min", None)
+    stdout_json.pop("utc_file", None)
+    stdout_json.pop("utc_remote", None)
+    stdout_json.pop("file_content", None)
+    stdout_json.pop("response_text", None)
+    stdout_json.get("response_json", {}).pop("utc", None)
 
     return sp.returncode, stdout_json
 
@@ -53,7 +53,7 @@ class TestCase(unittest.TestCase):
         # stopping the mock server
         self.server.shutdown()
 
-    def warnings(self, specific_stdout):
+    def _test_warnings(self, specific_stdout):
         if file.exists():
             file.unlink()
 
@@ -102,28 +102,31 @@ class TestCase(unittest.TestCase):
         })
 
     def test_server_not_responding(self):
-        self.warnings({
+        self._test_warnings({
             "warning_cause": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response',))"
         })
+
         (rc, stdout) = run("alpha")
         self.assertEqual(rc, 1)
 
     def test_404(self):
         self.server.RequestHandlerClass = NotFound
-        self.warnings({
+        self._test_warnings({
             "response": "<Response [404]>",
             "warning_cause": "404"
         })
+
         (rc, stdout) = run("alpha")
         self.assertEqual(rc, 1)
 
     def test_200_but_6_minutes_old(self):
         self.server.RequestHandlerClass = OkTooOld
-        self.warnings({
+        self._test_warnings({
             "response": "<Response [200]>",
             "response_json": {"status": "ok"},
             "warning_cause": "utc_remote < utc_min"
         })
+
         (rc, stdout) = run("alpha")
         self.assertEqual(rc, 1)
 
@@ -143,17 +146,19 @@ class TestCase(unittest.TestCase):
             "status": "ko",
             "warning_file": "deleted"
         })
+
         (rc, stdout) = run("alpha")
         self.assertEqual(rc, 1)
 
     def test_200_but_fixing(self):
         self.server.RequestHandlerClass = Fixing
-        self.warnings({
+        self._test_warnings({
             "response": "<Response [200]>",
             "response_json": {"status": "fixing"},
             "status": "fixing",
             "warning_cause": "fixing"
         })
+
         (rc, stdout) = run("alpha")
         self.assertEqual(rc, 1)
 
@@ -173,6 +178,7 @@ class TestCase(unittest.TestCase):
             "status": "ok",
             "warning_file": "deleted"
         })
+
         (rc, stdout) = run("alpha")
         self.assertEqual(rc, 0)
         (rc, stdout) = run("beta")
@@ -180,30 +186,33 @@ class TestCase(unittest.TestCase):
 
     def test_200_but_bad_utc(self):
         self.server.RequestHandlerClass = BadUtc
-        self.warnings({
+        self._test_warnings({
             "response": "<Response [200]>",
             "response_json": {"status": "ok"},
             "warning_cause": "Unknown string format"
         })
+
         (rc, stdout) = run("alpha")
         self.assertEqual(rc, 1)
 
     def test_200_but_no_utc(self):
         self.server.RequestHandlerClass = NoUtc
-        self.warnings({
+        self._test_warnings({
             "response": "<Response [200]>",
             "response_json": {"status": "ok"},
             "warning_cause": "Parser must be a string or character stream, not NoneType"
         })
+
         (rc, stdout) = run("alpha")
         self.assertEqual(rc, 1)
 
     def test_200_but_empty_response(self):
         self.server.RequestHandlerClass = EmptyResponse
-        self.warnings({
+        self._test_warnings({
             "response": "<Response [200]>",
             "warning_cause": "Expecting value: line 1 column 1 (char 0)"
         })
+
         (rc, stdout) = run("alpha")
         self.assertEqual(rc, 1)
 
@@ -223,6 +232,7 @@ class TestCase(unittest.TestCase):
             "status": "sudo rm -rf /",
             "warning_file": "deleted"
         })
+
         (rc, stdout) = run("alpha")
         self.assertEqual(rc, 1)
 
@@ -242,6 +252,7 @@ class TestCase(unittest.TestCase):
             "status": None,
             "warning_file": "deleted"
         })
+
         (rc, stdout) = run("alpha")
         self.assertEqual(rc, 1)
 

@@ -17,11 +17,11 @@ argparser.add_argument("-m", "--mode", help="")
 ns = argparser.parse_args()
 
 
-class CriticalException(Exception):
+class Error(Exception):
     pass
 
 
-def _exit(error_cause="", remove_file=False):
+def handle_exit(error_cause="", remove_file=False):
     if error_cause:
         ns.error_cause = error_cause
         ns.exit_code = 1
@@ -36,24 +36,24 @@ def _exit(error_cause="", remove_file=False):
     exit(ns.exit_code)
 
 
-def warning(cause):
+def handle_warning(cause):
     ns.warning_cause = cause
 
     if not ns.file_path.is_file():
         ns.file_path.write_text(ns.utc_now.isoformat())
         ns.warning_file = "created"
-        _exit()
+        handle_exit()
 
     ns.file_content = ns.file_path.read_text()
     ns.utc_file = dateutil.parser.parse(ns.file_content)
     if ns.utc_file < ns.utc_min:
-        _exit(error_cause="utc_file < utc_min")
+        handle_exit(error_cause="utc_file < utc_min")
 
     ns.warning_file = "unchanged"
-    _exit()
+    handle_exit()
 
 
-def blibli():
+def parse_data_from_remote():
     ns.file_path = pathlib.Path(ns.file_prefix + hashlib.md5(ns.uri.encode("utf-8")).hexdigest())
     ns.utc_now = datetime.datetime.utcnow()
     ns.utc_min = ns.utc_now - datetime.timedelta(minutes=ns.delay)
@@ -73,22 +73,22 @@ def blibli():
     if ns.status == "fixing":
         raise Exception("fixing")
     if ns.status != "ok":
-        raise CriticalException("status ko")
+        raise Error("status ko")
 
     ns.modes = ns.response_json.get("modes")
 
 
 if ns.mode:
     try:
-        blibli()
+        parse_data_from_remote()
         exit(0 if ns.mode in ns.modes else 1)
-    except Exception as e:
+    except Exception:
         exit(1)
 else:
     try:
-        blibli()
-        _exit(remove_file=True)
-    except CriticalException as e:
-        _exit(str(e))
+        parse_data_from_remote()
+        handle_exit(remove_file=True)
+    except Error as e:
+        handle_exit(str(e))
     except Exception as e:
-        warning(str(e))
+        handle_warning(str(e))
